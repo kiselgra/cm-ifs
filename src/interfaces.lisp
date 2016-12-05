@@ -34,7 +34,7 @@
  	 (apply #'string-append (cons str (cons (car rest) (cdr rest))))
  	 str)))
 
- (defun debug-out (format class &rest format-args)
+ (defun debug-out (class format &rest format-args)
    (if (find class *debug*)
        (apply #'format t (string-append "## " format) format-args))))
 
@@ -49,17 +49,35 @@
       (debug-out 'user-macro "thus -> ~a~%" res)
       res)))
 
+(defmacro cpp-guard (name &body body)
+  `(progn
+     (comment ,name :prefix "#ifndef ")
+     (comment ,name :prefix "#define ")
+     ,@body
+     (comment "" :prefix "")
+     (comment ,name :prefix "#endif // ")
+     ;; newline-at-eof
+     (comment "" :prefix "")))
+
 (defmacro with-interface ((name &key use) &body body &environment env)
-  (labels ((user-macro (form)
-	     (debug-out 'user-macro "--> ~a [ ~a / ~a / ~a ]~%" form
-			(cl:not (cmu-name (first form)))
-			(indirect-macrop form env)
-			(tonly (cl:not (cl:or (eql (first form) 'interface-only)
-					      (eql (first form) 'implementation-only)))))
-	     (cl:and (cl:not (cmu-name (first form))) ;(eql (symbol-package (first form)) (find-package :cmu-cxx)))
-		     (indirect-macrop form env)
-		     (cl:not (cl:or (eql (first form) 'interface-only)
-				    (eql (first form) 'implementation-only)))))
+  (labels ((user-macro-checks (form) 
+	     (list (cl:not (cmu-name (first form)))
+		   (indirect-macrop form env)
+		   (tonly (cl:not (cl:or (eql (first form) 'interface-only)
+					 (eql (first form) 'implementation-only))))))
+	   (user-macro (form)
+	     (let ((checks (multiple-value-list (user-macro-checks form))))
+	       (debug-out 'user-macro "--> ~a [ ~{~a~^ / ~} ]~%" form checks)
+	       (cl:and (first  checks)
+		       (second checks)
+		       (third  checks))))
+	   (message-for-unhandled (form)
+	     `(block-comment "skipping this form as I don't know how to handle it:"
+			     (comment (format nil "--> ~a~%" ',form) :prefix "   ")
+			     ,form
+			     (comment (format nil "--> checks: ~{~a~^, ~}"
+					      ',(multiple-value-list (user-macro-checks form)))
+				      :prefix "   ")))
 	   (interface-version (form)
 	     ;;(format t "--> IF ~a~%" form)
 	     (cl:if (user-macro form)
@@ -79,13 +97,16 @@
 		      (progn (cons 'progn (loop for x in (rest form) collect (interface-version x))))
 		      ;; similarly for decls, but also change to 'extern' and remove initialization
 		      (decl `(decl ,(loop for x in (second form)
-					 if (find '= x) collect
-					     `(extern ,@(butlast (butlast x)))
-					 else collect
-					     `(extern ,@x))
+				       if (find '= x) collect
+					 `(extern ,@(butlast (butlast x)))
+				       else collect
+					 `(extern ,@x))
 			       ,@(loop for x in (rest (rest form)) collect (interface-version x))))
+		      ;; we descend into macrolets (but don't evaluate them)
+		      (macrolet `(macrolet ,(second form)
+				   ,@(loop for x in (rest (rest form)) collect (interface-version x))))
 		      ;; swallow whatever we don't know how to handle
-		      (otherwise  `(block-comment "skipping this form as I don't know how to handle it:" (progn (comment (format nil "--> ~a~%" ',form) :prefix "   ") ,form))))))
+		      (otherwise  (message-for-unhandled form)))));`(block-comment "skipping this form as I don't know how to handle it:" (progn (comment (format nil "--> ~a~%" ',form) :prefix "   ") ,form))))))
 	   (plain-version (form)
 	     ;;(format t "--> PL ~a~%" form)
 	     (cl:if (user-macro form)
@@ -105,26 +126,26 @@
 		      ;; similarly for decls
 		      (decl `(decl ,(second form)
 			       ,@(loop for x in (rest (rest form)) collect (plain-version x))))
+		      ;; we descend into macrolets (but don't evaluate them)
+		      (macrolet `(macrolet ,(second form)
+				   ,@(loop for x in (rest (rest form)) collect (plain-version x))))
 		      ;; swallow whatever we don't know how to handle
-		      (otherwise  `(block-comment "skipping this form as I don't know how to handle it:" (progn (comment (format nil "--> ~a~%" ',form) :prefix "   ") ,form)))))))
+		      (otherwise (message-for-unhandled form))))))
     (cl:if (cl:not *gen-dependencies*)
 	   (loop for x in use do (load (format nil "~a.lisp" x))))
     (cl:if *gen-dependencies*
-	   (progn
-	     (format t "~a: ~{~a.lisp~^ ~}~%" *gen-dependencies* use))   ;; we need this to rebuild a cpp/h file when a lisp-file loaded by its base lisp file is changed.
-	     (cl:if *gen-interface*
-		    `(progn
-					;(substitute-if #\_ #'upper-case-p "Groucho Marx")
-		       (cpp-guard ,(substitute-if #\_ (lambda (c) (case c 
-								    ((#\-) t) 
-								    (otherwise nil)))
-						  (string-upcase (format nil "__~a_h__" name)))
-			 ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
-			 ,@(loop for form in body collect (interface-version form))))
-		    `(progn 
-		       (include ,(format nil "~a.h" name))
-		       ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
-		       ,@(loop for form in body collect (plain-version form)))))))
+	   (format t "~a: ~{~a.lisp~^ ~}~%" *gen-dependencies* use)
+	   (cl:if *gen-interface*
+		  `(cpp-guard ,(substitute-if #\_ (lambda (c) (case c 
+								((#\-) t) 
+								(otherwise nil)))
+					      (string-upcase (format nil "__~a_h__" name)))
+			      ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
+			      ,@(loop for form in body collect (interface-version form)))
+		  `(progn 
+		     (include ,(format nil "~a.h" name))
+		     ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
+		     ,@(loop for form in body collect (plain-version form)))))))
 
 
 (defmacro implementation-only (&body body)
