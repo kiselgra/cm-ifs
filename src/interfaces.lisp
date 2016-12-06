@@ -25,7 +25,7 @@
   `(multiple-value-bind (e p) (macroexpand-1 ,form ,env) (values p e))) ; values is just to muffle the 'defined but not used' warning
 
 (defparameter *possible-debug-values* '(user-macro))
-(defparameter *debug* '(user-macro))
+(defparameter *debug* '())
 
 (lisp
  (defun string-append (string-1 string-2 &rest rest)
