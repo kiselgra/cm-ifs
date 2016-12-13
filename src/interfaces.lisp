@@ -59,21 +59,38 @@
      ;; newline-at-eof
      (comment "" :prefix "")))
 
-(let ((old-fun (symbol-function 'function)))
-  (defmacro function (name args arr ret &body body)
-    `(progn (comment "FUN") 
-	  (apply ,old-fun ',name ',args ',arr ',ret ',body))))
-
 (defmacro with-interface ((name &key use) &body body &environment env)
-  (cl:cond (*gen-dependencies*
-	    (format t "~a: ~{~a.lisp~^ ~}~%" *gen-dependencies* use))
-	   (*gen-interface*
-	    `(macrolet ((function (name args arrow ret &body body)
-			    (declare (ignore body))
-			    `(cms-c::function ,name ,args ,arrow ,ret))
-			)
-	       ,@body))
-	   ))
+  (macrolet ((ignore-form (form) `'(,form (&body body) (declare (ignore body)) (values))))
+    (cl:cond (*gen-dependencies*
+	      (format t "~a: ~{~a.lisp~^ ~}~%" *gen-dependencies* use))
+	     (*gen-interface*
+	      `(macrolet ((interface-only (&body body)
+			    `(macrolet ((function (&body body) `(cms-c::function ,@body))
+					(using-namespace (&body body) `(cms-c::using-namespace ,@body))
+					;; ... all those handled below
+					)
+			       ,@body))
+			  (function (name args arrow ret &body body)
+			      (declare (ignore body))
+			      `(cms-c::function ,name ,args ,arrow ,ret))
+			  ,(ignore-form using-namespace)
+			  ,(ignore-form implementation-only)
+			  ;; ...
+			  )
+		 (progn
+		   ,@body)))
+	     (t
+	      `(macrolet ((implementation-only (&body body)
+			    `(macrolet ((include (&body body) `(cms-c::include ,@body))
+					;; ... all those handled below
+					)
+			       ,@body))
+			  ,(ignore-form include)
+			  ,(ignore-form interface-only)
+			  ;; ...
+			  )
+		 (progn
+		   ,@body))))))
  
   ; (labels ((user-macro-checks (form) 
   ; 	     (list (cl:not (cmu-name (first form)))

@@ -8,6 +8,7 @@
   (:export :with-interface
 	:*gen-interface*
 	:*gen-dependencies*
+	:interface-only
 	:implementation-only
 	   ))
 	 
