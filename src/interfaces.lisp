@@ -35,9 +35,10 @@
 					   `(decl (&body body) `(cms-c::decl ,@body)))
 					,(for-generator (:cxx :cuda)
 					   `(decl (&body body) `(cms-cxx::decl ,@body)))
+					(struct (&body body) `(cms-c::struct ,@body))
 					;; ... all those handled below
 					)
-			       ,@body))
+			       (progn ,@body)))
 			  (function (name args arrow ret &body body)
 			     (declare (ignore body))
 			     `(cms-c::function ,name ,args ,arrow ,ret))
@@ -54,6 +55,8 @@
 							`(extern ,@spec ,type ,name)))
 				   ,@body)))
 			  ,(for-generator (:cxx :cuda) (ignore-form using-namespace))
+			  (struct (&body body)
+			    `(interface-only (struct ,@body)))
 			  ,(ignore-form implementation-only)
 			  ;; ...
 			  )
@@ -61,22 +64,27 @@
 							      ((#\-) t) 
 							      (otherwise nil)))
 					    (string-upcase (format nil "__~a_h__" name)))
+		   (comment "INTERFACE GENERATED WITH CM-IFS")
+		   ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
 		   ,@body)))
 	     (t
 	      `(macrolet ((implementation-only (&body body)
 			    `(macrolet ((include (&body body) `(cms-c::include ,@body))
+					(struct (&body body) `(cms-c::struct ,@body))
 					,(for-generator (:cxx :cuda)
 					   `(class (&body body) `(cms-cxx::class ,@body)))
 					;; ... all those handled below
 					)
-			       ,@body))
-			  ,(ignore-form include)
+			       (progn ,@body)))
 			  ,(ignore-form interface-only)
+			  ,(ignore-form include)
+			  ,(ignore-form struct)
 			  ,(for-generator (:cxx :cuda) (ignore-form class))
 			  ;; ...
 			  )
 		 (progn
-		   (include ,(format nil "~a.h" name))
+		   (comment "IMPLEMENTATION GENERATED WITH CM-IFS")
+		   (implementation-only (include ,(format nil "~a.h" name)))
 		   ,@body))))))
  
 
