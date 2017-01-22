@@ -21,6 +21,7 @@
        (:export :with-interface
 		:*gen-interface*
 		:*gen-dependencies*
+		:*search-path-for-use*
 		:interface-only
 		:implementation-only))
      (asdf::defsystem cm-ifs

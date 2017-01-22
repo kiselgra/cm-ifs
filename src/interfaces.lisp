@@ -20,12 +20,22 @@
      ;; newline-at-eof
      (comment "" :prefix "")))
 
-(format t "--> gen: ~a~%" c-mera:*generator*)
+;;(format t "--> gen: ~a~%" c-mera:*generator*)
 
-(defmacro with-interface ((name &key use) &body body &environment env)
+(defvar *search-path-for-use* (list "."))
+
+(defun lookup-file (name suffix)
+  (loop for x in *search-path-for-use*
+     with f
+       do (setf f (concatenate 'string x "/" name "." suffix))
+     if (probe-file f)
+     return f
+     finally (error "Cannot find module ~a in search path ~a." name *search-path-for-use*)))
+
+(defmacro with-interface ((name &key use include (load-fn #'cl:load)) &body body &environment env)
   (macrolet ((ignore-form (form) `'(,form (&body body) (declare (ignore body)) (values))))
     (cl:cond (*gen-dependencies*
-	      (format t "~a: ~{~a.lisp~^ ~}~%" *gen-dependencies* use))
+	      (format t "~a: ~{~a~^ ~}~%" *gen-dependencies* (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) use)))
 	     (*gen-interface*
 	      `(macrolet ((interface-only (&body body)
 			    `(macrolet ((function (&body body) `(cms-c::function ,@body))
@@ -73,7 +83,10 @@
 							      (otherwise nil)))
 					    (string-upcase (format nil "__~a_h__" name)))
 		   (comment "INTERFACE GENERATED WITH CM-IFS")
-		   ,@(loop for x in use collect `(include ,(format nil "~a.h" x)))
+		   ,@(loop for x in use collect
+                   (cl:progn (cl:funcall load-fn (format nil "~a" x))
+                             `(include ,(format nil "~a.h" x))))
+           ,@(loop for x in include collect `(include ,(format nil "~a.h" x)))
 		   ,@body)))
 	     (t
 	      `(macrolet ((implementation-only (&body body)
@@ -104,10 +117,11 @@
 (defmacro header (name)
   `(implementation-only (include ,(format nil "~a.h" name))))
 
+
 (defmacro use (&rest modules)
   `(progn ,@(loop for m in modules append
 		 `((let ((*gen-interface* t))
-		     (load ,(format nil "~a.lisp" m))
+		     (load ,(lookup-file (format nil "~a" m) "lisp"))
 		     (values))
-		   (include ,(format nil "~a.h" m))))))
+		   (include ,(lookup-file (format nil "~a" m) "h"))))))
 
