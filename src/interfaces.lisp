@@ -84,8 +84,8 @@
 					    (string-upcase (format nil "__~a_h__" name)))
 		   (comment "INTERFACE GENERATED WITH CM-IFS")
 		   ,@(loop for x in use collect
-                   (cl:progn (cl:funcall load-fn (format nil "~a" x))
-                             `(include ,(format nil "~a.h" x))))
+                   `(progn (cl:funcall ,load-fn ,(format nil "~a" x))
+                           (include ,(format nil "~a.h" x))))
            ,@(loop for x in include collect `(include ,(format nil "~a.h" x)))
 		   ,@body)))
 	     (t
@@ -119,9 +119,13 @@
 
 
 (defmacro use (&rest modules)
+  (cl:if *gen-dependencies*
+         (cl:progn
+	      (format t "~a: ~{~a~^ ~}~%" *gen-dependencies* (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) modules))
+         (values))
   `(progn ,@(loop for m in modules append
 		 `((let ((*gen-interface* t))
 		     (load ,(lookup-file (format nil "~a" m) "lisp"))
 		     (values))
-		   (include ,(lookup-file (format nil "~a" m) "h"))))))
+		   (include ,(lookup-file (format nil "~a" m) "h")))))))
 
