@@ -32,10 +32,18 @@
      return f
      finally (error "Cannot find module ~a in search path ~a." name *search-path-for-use*)))
 
+(defun use-with-dependencies (modules)
+  (let ((lisp-files (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) modules)))
+    (format t "~a: ~{~a~^ ~}~%" *gen-dependencies* lisp-files)
+    (let ((*gen-dependencies* nil)
+	  (*gen-interface* t))
+      (dolist (f lisp-files)
+	(load f)))))
+
 (defmacro with-interface ((name &key use include (load-fn #'cl:load)) &body body &environment env)
   (macrolet ((ignore-form (form) `'(,form (&body body) (declare (ignore body)) (values))))
     (cl:cond (*gen-dependencies*
-	      (format t "~a: ~{~a~^ ~}~%" *gen-dependencies* (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) use)))
+	      (use-with-dependencies use))
 	     (*gen-interface*
 	      `(macrolet ((interface-only (&body body)
 			    `(macrolet ((function (&body body) `(cms-c::function ,@body))
@@ -121,7 +129,8 @@
 (defmacro use (&rest modules)
   (cl:if *gen-dependencies*
          (cl:progn
-	      (format t "~a: ~{~a~^ ~}~%" *gen-dependencies* (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) modules))
+	      ;(format t "~a: ~{~a~^ ~}~%" *gen-dependencies* (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) modules))
+	   (use-with-dependencies modules)
          (values))
   `(progn ,@(loop for m in modules append
 		 `((let ((*gen-interface* t))
