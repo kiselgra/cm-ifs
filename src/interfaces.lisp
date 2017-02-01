@@ -25,12 +25,18 @@
 (defvar *search-path-for-use* (list "."))
 
 (defun lookup-file (name suffix)
-  (loop for x in *search-path-for-use*
-     with f
-       do (setf f (concatenate 'string x "/" name "." suffix))
-     if (probe-file f)
-     return f
-     finally (error "Cannot find module ~a in search path ~a." name *search-path-for-use*)))
+  "Lookup a file in the directories listed in *SEARCH-PATH-FOR-USE*.
+   This is a bit more complex as we have to probe lisp-files with their
+   suffix, but have to return them without"
+  (let ((full-name (concatenate 'string name "." suffix)))
+    (loop for x in *search-path-for-use*
+       with f
+       do (setf f (concatenate 'string x "/" full-name))
+       if (probe-file f)
+       return (cl:if (string-equal suffix "lisp")
+		     (concatenate 'string x "/" name)
+		     f)
+       finally (error "Cannot find module ~a (~a) in search path ~a." name suffix *search-path-for-use*))))
 
 (defun use-with-dependencies (modules)
   (let ((lisp-files (mapcar (lambda (x) (lookup-file (format nil "~a" x) "lisp")) modules)))
@@ -92,9 +98,9 @@
 					    (string-upcase (format nil "__~a_h__" name)))
 		   (comment "INTERFACE GENERATED WITH CM-IFS")
 		   ,@(loop for x in use collect
-                   `(progn (cl:funcall ,load-fn ,(format nil "~a" x))
-                           (include ,(format nil "~a.h" x))))
-           ,@(loop for x in include collect `(include ,(format nil "~a.h" x)))
+			  `(progn (cl:funcall ,load-fn ,(lookup-file (format nil "~a" x) "lisp"))
+				  (include ,(format nil "~a.h" x))))
+		   ,@(loop for x in include collect `(include ,(format nil "~a.h" x)))
 		   ,@body)))
 	     (t
 	      `(macrolet ((implementation-only (&body body)
