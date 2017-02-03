@@ -119,6 +119,10 @@
 			  )
 		 (progn
 		   (comment "IMPLEMENTATION GENERATED WITH CM-IFS")
+		   ,@(loop for x in use collect
+			  `(progn (comment ,(format nil "sourcing ~a..." (lookup-file (format nil "~a" x) "lisp" :drop-suffix t)))
+				  (cl:funcall ,load-fn ,(lookup-file (format nil "~a" x) "lisp" :drop-suffix t)))
+			  )
 		   (implementation-only (include ,(format nil "~a.h" name)))
 		   ,@body))))))
  
