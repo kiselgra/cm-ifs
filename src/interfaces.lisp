@@ -33,7 +33,9 @@
        with f
        do (setf f (concatenate 'string x "/" full-name))
        if (probe-file f)
-       return (cl:cond (drop-suffix   name) ;(concatenate 'string x "/" name))
+       ;; works for alex, not for me (on arch, at least)
+       ;;return (cl:cond (drop-suffix   name) ;(concatenate 'string x "/" name))
+       return (cl:cond (drop-suffix   (concatenate 'string x "/" name))
 		       (change-suffix (concatenate 'string x "/" name "." change-suffix))
 		       (t             f))
        finally (error "Cannot find module ~a (~a) in search path ~a." name suffix *search-path-for-use*))))
