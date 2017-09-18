@@ -116,6 +116,7 @@
 			  ,(ignore-form interface-only)
 			  ,(ignore-form include)
 			  ,(ignore-form struct)
+			  ,(ignore-form typedef)
 			  ,(for-generator (:cxx :cuda) (ignore-form class))
 			  ;; ...
 			  )

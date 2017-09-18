@@ -1,29 +1,19 @@
-;(require :cm-ifs)
 (use-package :cm-ifs)
 
-(defmacro test-ifs (spec)
-  `(progn
-     (format t "--> ~a~%------------~%~%" (macroexpand-1 ',spec))
-     ,spec))
-  
+(with-interface (test)
 
-(test-ifs
- (with-interface (test :use (indirect))
-   (include <vector>)
-   (implementation-only
-    (include <iostream>))
-   (using-namespace std)
-   (function test ((int argc) (char **argv)) -> (unsigned int)
-     (for ((int i = 0) (< i argc) ++i)
-       (printf "-> %s\\n" argv[i])))
-   (decl ((const unsigned int foo = 123)
-	  (int *p = 0)
-	  ;(int* q[10] { 1 2 3 }))
-	  )
-     )
-   (interface-only
-    (function test2 ((int argc) (char **argv)) -> (unsigned int)
-      (for ((int i = 0) (< i argc) ++i)
-   	(printf "-> %s\\n" argv[i])))
-    )
-))
+  (struct X
+    (decl ((int i))))
+  (typedef struct X X)
+
+  (function foo-1 ((int i)) -> X
+    (return (cast X (clist i))))
+  
+  (function foo-2 ((X x)) -> int
+    (return x.i))
+
+  (implementation-only
+   (include <stdio.h>)
+	    
+   (function main () -> int
+     (return (foo-2 (foo-1 123))))))
